@@ -1,0 +1,161 @@
+from pymycobot.mycobot import MyCobot  # MyCobot 라이브러리에서 MyCobot 클래스를 가져옴
+import time  # 시간 지연을 위해 time 라이브러리를 가져옴
+import gspread  # Google 스프레드시트를 사용하기 위해 gspread 라이브러리를 가져옴
+from oauth2client.service_account import ServiceAccountCredentials  # 서비스 계정 인증을 위해 필요한 라이브러리 가져옴
+
+mc = MyCobot("COM4", 115200)  # MyCobot 객체를 생성하고 COM4 포트와 115200 보드레이트로 초기화
+
+# 인증 범위 설정
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+
+# JSON 파일 경로 설정
+json_file_name = r"C:\Users\user\Desktop\프로젝트\AGV\dddd.json"
+
+# 자격 증명 객체 생성
+credentials = ServiceAccountCredentials.from_json_keyfile_name(json_file_name, scope)
+
+# gspread 클라이언트 인증
+gc = gspread.authorize(credentials)
+
+# Google 스프레드시트 URL
+spreadsheet_url = "https://docs.google.com/spreadsheets/d/1zUStVhzHcurucc0ttAxCZCRcqRCpbvykGe30ZGCe1Wc/edit?usp=sharing"
+
+# 스프레드시트 문서 열기
+doc = gc.open_by_url(spreadsheet_url)
+
+# 시트 열기
+worksheet = doc.worksheet('cobot')
+
+# B열 데이터 가져오기
+b_column_values = worksheet.col_values(2)  # B열의 모든 값 가져오기
+
+# 마지막 데이터가 있는 셀 찾기
+last_row = len(b_column_values)  # 마지막 데이터가 있는 행 번호
+
+# 데이터를 추가할 다음 행 찾기
+next_row = last_row + 1
+
+# 각 위치의 각도 설정
+intermediate_position = [0, 0, 0, 0, 0, 0]
+
+# 파트 1 위치 설정
+part1_positions = [
+    [-33, -54, -15, -0.5, 91.23, -0.08], [-26.89, -37, -42, 7.5, 97.91, -0.08],
+    [-15, -20, -68, 12.65, 94.3, -0.08]
+]
+assemble1_positions = [
+    [-102, -27, -82, -42, -9.5, -0.2], [-101, -45, -58, -42, -8, 0.17],
+    [-103, -14, -100, -58, -10 ,0.4]
+]
+pre_assemble1_positions = [
+    [-97, -27, -82.2, -40, -5, -0.2], [-96, -45, -58, -38.14, -4, 0.17],
+    [-97, -14, -100, -55, -3, 0.4]
+]
+
+# 파트 2 위치 설정
+part2_positions = [
+    [-34,-54.5,-15,-0.8,91.4,0], [-24.6, -36.47, -46.14, 7.2, 90, -0.26], 
+    [-13.35, -26.1, -58.79, 13.53, 93.69, 0], [-14.76, -3.69, -93.42, 24.6, 90.26, -4.13]
+]
+assemble2_positions = [
+    [-98.61, -40.51, -55.72, -45.43, -4.57, 0.08], [-98.87, -26.98, -80.06, -39.81, -4.39, -6.32], 
+    [-98.43, -61, -34, -33, -3.7, -7.2], [-98.43, -9.14, -133.68, 5.44, -7.47, 0.26]
+]
+pre_assemble2_positions = [
+    [-101.25, -42.27, -54.93, -41.48, -4.74, 0.08], [-102.39, -27.07, -80.06, -39.9, -4.92, -6.32],
+    [-101.68, -52.91, -58.18, -11.68, -10.81, 0.26], [-102.3, -9.93, -128.75, 5, -7.03, 0.17]
+]
+
+# 트레이 번호 가져오기 함수 정의
+def get_tray_number():
+    while True:
+        # 기본 입력을 통해 트레이 번호를 가져옴
+        if mc.get_basic_input(4) == 0:
+            tray = 1
+            return tray
+        elif mc.get_basic_input(5) == 0:
+            tray = 2
+            return tray
+
+# 작업 수행 함수 정의
+def perform_tasks(mc, tray, part_positions, assemble_positions, pre_assemble_positions):
+    global next_row
+    for i, (part, assemble, pre_assemble) in enumerate(zip(part_positions, assemble_positions, pre_assemble_positions)):
+        print(f"{i+1}번 위치의 part")
+        mc.set_color(0, 255, 0)  # MyCobot 색상을 초록색으로 설정
+        mc.send_angles(part, 20)  # 파트 위치로 이동
+        time.sleep(5)
+        mc.set_basic_output(1, 0)  # 전자석 ON
+        mc.set_color(255, 0, 0)  # MyCobot 색상을 빨간색으로 설정
+        print("전자석 ON")
+        time.sleep(5)
+        mc.send_angles(intermediate_position, 20)  # 중간 위치로 이동
+        time.sleep(8)
+        mc.send_angles(pre_assemble, 20)  # 프리 어셈블 위치로 이동
+        time.sleep(5)
+        print(f"{i+1}번 위치의 assemble")
+        mc.send_angles(assemble, 10)  # 어셈블 위치로 이동
+        time.sleep(4)  # 어셈블 위치로 이동 후 대기
+        mc.set_basic_output(1, 1)  # 전자석 OFF
+        mc.set_color(0, 255, 0)  # MyCobot 색상을 초록색으로 설정
+        print("전자석 OFF")
+        time.sleep(1)
+        mc.send_angles(intermediate_position, 20)  # 중간 위치로 이동
+        time.sleep(5)
+        if tray == 1:
+            if i == 0:
+                next_row += 1
+                worksheet.update_acell(f'B{next_row}', '1m01')
+            elif i == 1:
+                next_row += 1
+                worksheet.update_acell(f'B{next_row}', '1m02')
+            elif i == 2:
+                next_row += 1
+                worksheet.update_acell(f'B{next_row}', '1m03')
+                mc.set_basic_output(4, 0)
+                time.sleep(0.5)
+                mc.set_basic_output(4, 1)
+        elif tray == 2:
+            if i == 0:
+                next_row += 1
+                worksheet.update_acell(f'B{next_row}', '2m01')
+            elif i == 1:
+                next_row += 1
+                worksheet.update_acell(f'B{next_row}', '2m02')
+            elif i == 2:
+                next_row += 1
+                worksheet.update_acell(f'B{next_row}', '2m03')
+                mc.set_basic_output(4, 0)
+                time.sleep(0.5)
+                mc.set_basic_output(4, 1)
+
+# 작업 시작 함수 정의
+def start_task(mc, tray, part_positions, assemble_positions, pre_assemble_positions):
+    mc.set_color(255, 255, 255)  # MyCobot 색상을 흰색으로 설정
+    mc.send_angles(intermediate_position, 10)  # 중간 위치로 이동
+    time.sleep(5)
+    mc.set_color(255, 255, 0)  # MyCobot 색상을 노란색으로 설정
+    print(f"{tray}번 차량의 작업을 시작합니다.")
+    perform_tasks(mc, tray, part_positions, assemble_positions, pre_assemble_positions)
+    print(f"{tray}번 차량의 작업을 완료했습니다.")
+
+# 메인 함수 정의
+def main():
+    try:
+        while True:
+            tray = get_tray_number()
+            if tray == 0:
+                print("작업을 종료합니다.")
+                break
+
+            if tray == 1:
+                start_task(mc, tray, part1_positions, assemble1_positions, pre_assemble1_positions)
+            elif tray == 2:
+                start_task(mc, tray, part2_positions, assemble2_positions, pre_assemble2_positions)
+        
+    except KeyboardInterrupt:
+        pass
+
+# 메인 함수 실행
+if __name__ == "__main__":
+    main()
